@@ -1,9 +1,12 @@
 package com.amazonaws.kinesisvideo.demoapp.fragment
 
 import android.Manifest
+import android.annotation.TargetApi
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
 import android.os.AsyncTask
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -11,11 +14,14 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.ContextCompat.startForegroundService
 import androidx.fragment.app.Fragment
 import com.amazonaws.kinesisvideo.demoapp.KinesisVideoWebRtcDemoApp
 import com.amazonaws.kinesisvideo.demoapp.R
+import com.amazonaws.kinesisvideo.demoapp.activity.ScreenRecorderService
 import com.amazonaws.kinesisvideo.demoapp.activity.SimpleNavActivity
 import com.amazonaws.kinesisvideo.demoapp.activity.WebRtcActivity
 import com.amazonaws.regions.Region
@@ -126,10 +132,41 @@ class StreamWebRtcConfigurationFragment : Fragment() {
             ChannelRole.MASTER
         )
         if (mChannelArn != null) {
-            val extras = setExtras(true)
-            val intent = Intent(activity, WebRtcActivity::class.java)
-            intent.putExtras(extras)
-            startActivity(intent)
+            startScreenCapture()
+
+//            val extras = setExtras(true)
+//            val intent = Intent(activity, WebRtcActivity::class.java)
+//            intent.putExtras(extras)
+//            startActivity(intent)
+        }
+    }
+
+    @TargetApi(21)
+    private fun startScreenCapture() {
+        val mMediaProjectionManager =
+            activity?.application?.getSystemService(AppCompatActivity.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager?
+        if (mMediaProjectionManager != null) {
+            startActivityForResult(
+                mMediaProjectionManager.createScreenCaptureIntent(),
+                WebRtcActivity.CAPTURE_PERMISSION_REQUEST_CODE
+            )
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        Log.d(TAG, "onActivityResult")
+        if (requestCode != WebRtcActivity.CAPTURE_PERMISSION_REQUEST_CODE) {
+            return
+        }
+        val intent = Intent(activity, ScreenRecorderService::class.java)
+        val extras = setExtras(true)
+        intent.putExtras(extras)
+        intent.putExtra(ScreenRecorderService.PermissionData, data)
+//        gagaga(data)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            activity?.startForegroundService(intent)
+        } else {
+            activity?.startService(intent)
         }
     }
 
@@ -150,7 +187,7 @@ class StreamWebRtcConfigurationFragment : Fragment() {
     private fun setExtras(isMaster: Boolean): Bundle {
         val extras = Bundle()
         val channelName = mChannelName!!.text.toString()
-        val clientId = mClientId!!.text.toString()
+        val clientId = mClientId?.text.toString().ifEmpty { UUID.randomUUID().toString() }
         val region = mRegion!!.text.toString()
         extras.putString(KEY_CHANNEL_NAME, channelName)
         extras.putString(KEY_CLIENT_ID, clientId)
